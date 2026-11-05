@@ -1,11 +1,14 @@
-# Created 2026-11-05 21:12 CET — build-apk workflow v1.1 for mic2sonos fork
-# Builds an installable APK on GitHub's servers. Run it from the Actions tab → "Build APK" → "Run workflow".
+# Created 2026-11-05 21:48 CET — build-apk workflow v2.0 for mic2sonos fork
+# Builds a signed APK with a fixed key and publishes it as a GitHub Release (for Obtainium updates).
 name: Build APK
 
 on:
   workflow_dispatch:
   push:
     branches: [ main ]
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -26,13 +29,31 @@ jobs:
           yes | $SDKM --licenses > /dev/null || true
           $SDKM "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Build debug APK
+      - name: Restore fixed signing key (stops if the secret is missing)
+        env:
+          KEY_B64: ${{ secrets.MIC2SONOS_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEY_B64" ]; then echo "Secret MIC2SONOS_KEYSTORE_B64 is missing - add it under Settings > Secrets and variables > Actions"; exit 1; fi
+          echo "$KEY_B64" | grep -v '^#' | base64 -d > "$RUNNER_TEMP/mic2sonos.keystore"
+          echo "MIC2SONOS_KEYSTORE=$RUNNER_TEMP/mic2sonos.keystore" >> "$GITHUB_ENV"
+
+      - name: Build APK
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk "mic2sonos-1.0.${{ github.run_number }}.apk"
 
-      - name: Upload APK
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: mic2sonos-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: mic2sonos-1.0.${{ github.run_number }}.apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: mic2sonos 1.0.${{ github.run_number }}
+          body: "Automatic build from commit ${{ github.sha }}"
+          files: mic2sonos-1.0.${{ github.run_number }}.apk
+          make_latest: true
