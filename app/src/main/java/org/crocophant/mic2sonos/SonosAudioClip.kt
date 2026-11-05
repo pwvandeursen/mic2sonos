@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
@@ -16,6 +16,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.cert.X509Certificate
+import java.security.SecureRandom
+import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
 /**
@@ -62,33 +64,25 @@ class SonosAudioClip(private val context: Context) {
         private const val WEBSOCKET_PROTOCOL = "v1.api.smartspeaker.audio"
     }
 
-    @SuppressLint("CustomX509TrustManager")
-    private val client = HttpClient(CIO) {
+    // v1.1 (2026-11-05): switched from the CIO engine to OkHttp. CIO checks the certificate
+    // against a reverse-DNS name of the speaker IP, which fails on networks whose DNS
+    // returns a custom name for Sonos players. Sonos uses self-signed certificates on the
+    // local network, so certificate and hostname checks are skipped for this LAN-only client.
+    @SuppressLint("CustomX509TrustManager", "TrustAllX509TrustManager")
+    private val trustAll = object : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+        override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+    }
+
+    private val client = HttpClient(OkHttp) {
         install(WebSockets)
         engine {
-            https {
-                // IMPORTANT: Sonos devices use self-signed certificates on port 1443 for the AudioClip API.
-                // Standard certificate validation fails with: CertPathValidatorException: Trust anchor for certification path not found.
-                // Since we're communicating with local network devices in a controlled environment,
-                // we bypass certificate validation here. This is acceptable for local network services
-                // and follows the pattern used by other Sonos client libraries (e.g., sonos-websocket).
-                trustManager = object : X509TrustManager {
-                    @SuppressLint("TrustAllX509TrustManager")
-                    override fun checkClientTrusted(
-                        chain: Array<out X509Certificate>?,
-                        authType: String?
-                    ) {
-                    }
-
-                    @SuppressLint("TrustAllX509TrustManager")
-                    override fun checkServerTrusted(
-                        chain: Array<out X509Certificate>?,
-                        authType: String?
-                    ) {
-                    }
-
-                    override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-                }
+            config {
+                val sslContext = SSLContext.getInstance("TLS")
+                sslContext.init(null, arrayOf(trustAll), SecureRandom())
+                sslSocketFactory(sslContext.socketFactory, trustAll)
+                hostnameVerifier { _, _ -> true }
             }
         }
     }
