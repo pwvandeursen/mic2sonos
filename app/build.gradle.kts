@@ -14,10 +14,23 @@ android {
         applicationId = "org.crocophant.mic2sonos"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // v2.0 (2026-11-05): version follows the GitHub build number so updaters can see new builds
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+        versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // v2.0 (2026-11-05): sign with a fixed key (provided by the build workflow) so updates install over the old version
+    signingConfigs {
+        getByName("debug") {
+            System.getenv("MIC2SONOS_KEYSTORE")?.let {
+                storeFile = file(it)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
