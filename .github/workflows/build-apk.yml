@@ -1,4 +1,4 @@
-# Created 2026-11-05 21:00 CET — build-apk workflow v1.0 for mic2sonos fork
+# Created 2026-11-05 21:12 CET — build-apk workflow v1.1 for mic2sonos fork
 # Builds an installable APK on GitHub's servers. Run it from the Actions tab → "Build APK" → "Run workflow".
 name: Build APK
 
@@ -20,11 +20,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android 16 platform (SDK 36)
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android 16 platform (SDK 36) on the preinstalled SDK
+        run: |
+          SDKM=$(ls -d $ANDROID_HOME/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          yes | $SDKM --licenses > /dev/null || true
+          $SDKM "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build debug APK
         run: |
