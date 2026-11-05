@@ -828,7 +828,9 @@ fun DeviceList(
     context: android.content.Context? = null
 ) {
     LazyColumn(modifier = modifier.padding(horizontal = 8.dp)) {
-        items(devices) { device ->
+        // v1.1 (2026-11-05): show speakers alphabetically (case-insensitive), then by IP for identical names
+        val sortedDevices = devices.sortedWith(compareBy<SonosDevice, String>(String.CASE_INSENSITIVE_ORDER) { it.name }.thenBy { it.ipAddress })
+        items(sortedDevices) { device ->
             // Check if selected by IP address (more stable than object equality)
             val isSelected = selectedDevices.any { it.ipAddress == device.ipAddress }
             DeviceCard(
